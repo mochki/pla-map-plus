@@ -108,10 +108,10 @@ class MapWindow(QWidget):
             "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png",
             {
                 "shadowUrl": "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
-                "iconSize": [25, 41],
-                "iconAnchor": [12, 41],
-                "popupAnchor": [1, -34],
-                "shadowSize": [41, 41],
+                "iconSize": [0, 0],
+                "iconAnchor": [0, 0],
+                "popupAnchor": [0, 0],
+                "shadowSize": [0, 0],
             },
         )
 
@@ -121,10 +121,10 @@ class MapWindow(QWidget):
             "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
             {
                 "shadowUrl": "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
-                "iconSize": [25, 41],
-                "iconAnchor": [12, 41],
-                "popupAnchor": [1, -34],
-                "shadowSize": [41, 41],
+                "iconSize": [12, 20],
+                "iconAnchor": [6, 20],
+                "popupAnchor": [1, -17],
+                "shadowSize": [20, 20],
             },
         )
         self.single_spawner_icon.addTo(self.map)
@@ -174,6 +174,61 @@ class MapWindow(QWidget):
         map_id: LAArea = self.location_combobox.itemData(index)
         self.spawner_information = SPAWNER_INFORMATION_LA[map_id].spawners
         self.encounter_information = ENCOUNTER_INFORMATION_LA[map_id]
+
+
+        agg_enc = []
+        multis = []
+        singles = []
+        # self.sad_enc_ids = []
+
+        for spawner in self.spawner_information:
+            # filter unnecessary
+            if spawner.is_mass_outbreak:
+                continue
+            
+            single_spawner = (
+                spawner.min_spawn_count == spawner.max_spawn_count
+                and spawner.min_spawn_count == 1
+            )
+            multi_spawner = (
+                spawner.min_spawn_count == spawner.max_spawn_count
+                and spawner.min_spawn_count != 1
+            )
+            if not single_spawner and not multi_spawner:
+                continue
+
+            # error in some huge u64 id, bleh
+            try:
+                enc_key_64 = np.uint64(spawner.encounter_table_id)
+                encounter_reference = self.encounter_information[enc_key_64]
+                enc_table_exp = encounter_reference.slots.view(np.recarray)
+
+                spawner_agg = []
+                for slot in enc_table_exp:
+                    nameShit = get_name_en(slot.species, slot.form, slot.is_alpha)
+                    spawner_agg.append(nameShit)
+
+                if multi_spawner:
+                    multis.append(spawner_agg)
+                elif single_spawner:
+                    singles.append(spawner_agg)
+                agg_enc.append(spawner_agg)
+            except:
+                # self.sad_enc_ids.append(np.uint64(spawner.encounter_table_id))
+                pass # ignore errors. i meeaaaan
+
+        deduped_encs = set(sum(agg_enc, []))
+        # alphas = [x.replace('Alpha ', '') for x in deduped_encs if 'Alpha' in x]
+        nonalphas = [x for x in deduped_encs if 'Alpha' not in x]
+
+        # [y for y in [x.replace('Alpha ', '') for x in alphas] if y not in nonalphas]
+        self.aggregate_map_encounters = sorted(nonalphas)
+
+        # sry stopped caring
+        self.cleanedMultis = sorted(set([x.replace('Alpha ', '') for x in sum(multis, [])]))
+        self.cleanedSingles = [x for x in set(sum(singles, [])) if x not in self.cleanedMultis and not "Alpha " in x]
+
+
         if not hasattr(self, "map"):
             return
         self.map.setView([4096, 4096], 1)
@@ -266,6 +321,28 @@ class MapWindow(QWidget):
                         np.uint64(spawner.encounter_table_id)
                     ].slots.view(np.recarray)
                 )
+                + "\n".join(f" " for x in range(4))
+                + f"   Map Multi Spawns:\n"
+                + "\n".join(
+                    f" + {encounter}"
+                    for encounter in self.cleanedMultis
+                )
+                + "\n".join(f" " for x in range(2))
+                + f"   Map Single Spawns:\n"
+                + "\n".join(
+                    f" + {encounter}"
+                    for encounter in self.cleanedSingles
+                )
+                # + "\n".join(
+                #     f" + {encounter}"
+                #     for encounter in self.aggregate_map_encounters
+                # )
+                # + "\n".join(f" " for x in range(2))
+                # + f"Lost IDs:\n"
+                # + "\n".join(
+                #     f" + {id}"
+                #     for id in self.sad_enc_ids
+                # )
             )
         # select new marker
         self.map.runJavaScriptForMap(
