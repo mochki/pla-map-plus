@@ -26,6 +26,7 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QPushButton,
     QTableWidgetItem,
+    QApplication,
 )
 from qtpy.QtGui import QRegularExpressionValidator
 from qtpy import QtCore
@@ -199,15 +200,38 @@ class GeneratorWindow(QDialog):
         self.generate_button = QPushButton("Generate")
         self.generate_button.clicked.connect(self.generate)
 
+        self.clipboard_button = QPushButton("Copy to Clipboard")
+        self.clipboard_button.clicked.connect(self.to_clipboard)
+
         self.result_table = ResultTableWidget()
         self.main_layout.addWidget(self.top_widget)
         self.main_layout.addWidget(self.generate_button)
+        self.main_layout.addWidget(self.clipboard_button)
         self.main_layout.addWidget(self.progress_bar)
         self.main_layout.addWidget(self.result_table)
         self.resize(
             sum(column[1] for column in self.result_table.COLUMNS),
             self.height(),
         )
+
+    def to_clipboard(self) -> None:
+        rows = self.result_table.rowCount()
+        cols = self.result_table.columnCount()
+
+        table_data = []
+        for row in range(rows):
+            row_data = []
+            for col in range(cols):
+                item = self.result_table.item(row, col)
+                if item is not None:
+                    row_data.append(item.text())
+                else:
+                    row_data.append('')
+            table_data.append('\t'.join(row_data))
+        
+        clipboard_data = '\n'.join(table_data)
+        clipboard = QApplication.clipboard()
+        clipboard.setText(clipboard_data)
 
     def generate(self) -> None:
         """Generate paths for spawner"""
